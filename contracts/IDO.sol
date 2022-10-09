@@ -10,12 +10,15 @@ import "./Whitelist.sol";
 import "./Pool.sol";
 import "./Validations.sol";
 
+
 contract IDO is Pausable, AccessControl, Ownable, Whitelist {
   mapping(address => bool) private _didRefund; // keep track of users who did refund project token.
   bytes32 private constant POOL_OWNER_ROLE = keccak256("POOL_OWNER_ROLE");
   IPool private pool;
   IERC20 private projectToken;
+  IERC20 private sToken;
   address stakedToken;
+  uint256 ONE = 10 ** 18 ;
 
   event LogPoolOwnerRoleGranted(address indexed owner);
   event LogPoolOwnerRoleRevoked(address indexed owner);
@@ -26,6 +29,25 @@ contract IDO is Pausable, AccessControl, Ownable, Whitelist {
   constructor(address _stakedToken) {
     address stakedToken = _stakedToken;
     _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+    sToken = IERC20(_stakedToken);
+  }
+
+  function addAddressesToWhitelist(address[] calldata whitelistedAddresses)
+    external
+  {
+    addToWhitelist(whitelistedAddresses);
+  }
+
+  function claimWhitelist() external{
+    uint256 amounttickets;
+    amounttickets = sToken.GetNoOfTickets(msg.sender);
+    require(amounttickets >= ONE, "Not enough tickets");
+    
+    sToken.removeNoOfTickets(msg.sender , ONE);
+    grantRole(POOL_OWNER_ROLE, msg.sender);
+    addToWhitelist([msg.sender]);
+
+
   }
 
   // Admin grants PoolOwner role to some address;
@@ -69,7 +91,7 @@ contract IDO is Pausable, AccessControl, Ownable, Whitelist {
       status: IPool.PoolStatus(_status)
     });
 
-    pool = new Pool(model,stakedToken );
+    pool = new Pool(model,stakedToken);
     emit LogPoolCreated(_msgSender());
     success = true;
   }
@@ -109,12 +131,7 @@ contract IDO is Pausable, AccessControl, Ownable, Whitelist {
     success = true;
   }
 
-  function addAddressesToWhitelist(address[] calldata whitelistedAddresses)
-    external
-    onlyRole(POOL_OWNER_ROLE)
-  {
-    addToWhitelist(whitelistedAddresses);
-  }
+
 
   function getCompletePoolDetails()
     external
@@ -129,6 +146,8 @@ contract IDO is Pausable, AccessControl, Ownable, Whitelist {
   receive() external payable _onlyWhitelisted(msg.sender) {
     pool.deposit{value: msg.value}(msg.sender);
   }
+
+
 
   function refund()
     external

@@ -1,3 +1,4 @@
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -6,16 +7,18 @@ import "./IPool.sol";
 import "./Whitelist.sol";
 import "./Pool.sol";
 
-contract IDOLaunchPad is Ownable,IDO{
+contract IDOLaunchPad is Ownable, IDO{
 
     using SafeMath for uint256;
     IERC20 public sToken;
+    IERC20 public projectToken;
     uint256 public totalUniqueStakers;
     uint256 public minStake;
     uint256[2] public plans = [15 days , 90 days];
+    mapping(address => uint256) IDOtimestamps;
 
     mapping(uint => address) IDOs;
-    uint256 Noofidos;
+    uint256 idocount;
     address currentIDO;
     address current15daypool;
     address current90daypool;
@@ -46,12 +49,13 @@ contract IDOLaunchPad is Ownable,IDO{
      mapping(address => User) public users;
      mapping(address => bool) public uniqueStaker;
   
-     uint256 ONE = 10 ** 18;
 
-    constructor(address _sToken) {
+    constructor(address _sToken , address _projectToken) {
     sToken = IERC20(_sToken);
+    projectToken = IERC20(_projectToken);
      minStake = 500;
-     Noofidos = 0;
+     idocount = 0;
+     current90daypool == address(0);
   }
 
 
@@ -93,16 +97,20 @@ contract IDOLaunchPad is Ownable,IDO{
           user.poolAddresses[user.stakecount] = current15daypool;
           IPool loadpool = IPool(user.poolAddresses[user.stakecount]);
           loadpool.updatePoolStatus(2);
-          loadpool.deposit(msg.sender);
-          user.tickets += ONE*(amount/minStake);
-          require(amount <= sToken.balanceOf(msg.sender), "you don't have enough balance.");
-          sToken.transferFrom(msg.sender , user.poolAddresses[user.stakecount] , amount);
-
+          loadpool.deposit{value: amount}(msg.sender);
+          uint ticketcount = ONE*(amount/minStake);
+          sToken.AddNoOfTickets(msg.sender,ticketcount);
+          
+          user.tickets += ticketcount;
+          
+          
           }
 
         else {
-          if (current90daypool == address(0)) {
-          current90daypool = createPool(ONE,minStake,block.timestamp,(block.timestamp + 90 days), 0);
+          if (current90daypool == address(0)){
+          uint256 currenttimestamp = block.timestamp;
+          uint256 end = block.timestamp.add(7776000);
+          current90daypool = createPool(ONE,minStake,currenttimestamp,end,0);
           }
           user.poolAddresses[user.stakecount] = current90daypool;
           IPool loadpool = IPool(user.poolAddresses[user.stakecount]);
@@ -114,22 +122,25 @@ contract IDOLaunchPad is Ownable,IDO{
 
           }
 
-        stakeToken.transferFrom(msg.sender, owner, amount);
+        sToken.transferFrom(msg.sender, owner, amount);
         user.totalstakeduser += amount;
         user.stakerecord[user.stakecount].plan = plan;
         user.stakerecord[user.stakecount].stakeTime = block.timestamp;
         user.stakerecord[user.stakecount].amount = amount;
-        user.stakerecord[user.stakecount].withdrawTime = block.timestamp.add(durations[plan]);
+        user.stakerecord[user.stakecount].withdrawTime = block.timestamp.add(plans[plan]);
         
         emit Staked(msg.sender, amount, block.timestamp);
     }
 
-    function createIDO(address _walletAddress, address _projectTokenAddress,uint16 _minAllocationPerUser,uint256 _maxAllocationPerUser,uint256 _totalTokenProvided,uint256 _exchangeRate,uint256 _tokenPrice,uint256 _totalTokenSold) onlyOwner{
+    function createIDO(address _walletAddress, address _projectTokenAddress,uint16 _minAllocationPerUser,uint256 _maxAllocationPerUser,uint256 _totalTokenProvided,uint256 _exchangeRate,uint256 _tokenPrice,uint256 _totalTokenSold) onlyOwner public{
         IDO newIDO = new IDO();
-        IDOs[Noofidos] = newIDO ; 
-        Noofidos++;
+        IDOs[idocount] = newIDO ; 
+        idocount++;
         newIDO.addIDOInfo(_walletAddress,_projectTokenAddress,_minAllocationPerUser,_maxAllocationPerUser,_totalTokenProvided,_exchangeRate,_tokenPrice,_totalTokenSold);
         current15daypool = newIDO.createPool(ONE,minStake,block.timestamp,(block.timestamp + 15 days), 0);
+        current15daypool.updatePoolStatus(2);
+        IDOtimestamps[newIDO] = block.timestamp;
+
 
     }
 
@@ -276,6 +287,5 @@ library SafeMath {
         return a % b;
     }
 
-  // Admin grants PoolOwner role to some 
 
 }
